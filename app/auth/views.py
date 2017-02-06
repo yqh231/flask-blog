@@ -52,8 +52,11 @@ def register():
     if form.validate_on_submit():
         user = User(email=form.email.data,
                     username=form.username.data,
-                    password=form.password.data)
+                    )
+        user.password = form.password.data
+        #user.set_id = user.id
         user.save()
+        user.set_id = user.id
         token = user.generate_confirmation_token()
         send_email(user.email, 'Confirm Your Account',
                    'auth/email/confirm', user=user, token=token)
