@@ -17,12 +17,26 @@ from . import db, login_manager
 
 class User(UserMixin, db.Document):
     __tablename__ = 'users'
-    id = db.StringField(primary_key = True)
+    _id = db.StringField()
     email = db.StringField(max_length = 64, unique = True)
     username = db.StringField(max_length = 64, unique = True)
     #role_id = db.Column(db.Integer, db.ForeignKey('roles.id'))
     password_hash = db.StringField(max_length = 128)
     confirmed = db.BooleanField(default = False)
+
+    @property
+    def set_id(self):
+        return unicode(self._id)
+
+    @set_id.setter
+    def set_id(self, value):
+        self._id = value
+
+    def get_id(self):
+        try:
+            return unicode(self._id)
+        except AttributeError:
+            raise NotImplementedError('No `id` attribute - override `get_id`')
 
     @property
     def password(self):
@@ -37,7 +51,7 @@ class User(UserMixin, db.Document):
 
     def generate_confirmation_token(self, expiration=3600):
         s = Serializer(current_app.config['SECRET_KEY'], expiration)
-        return s.dumps({'confirm': self.id})
+        return s.dumps({'confirm': self._id})
 
     def confirm(self, token):
         s = Serializer(current_app.config['SECRET_KEY'])
@@ -45,7 +59,7 @@ class User(UserMixin, db.Document):
             data = s.loads(token)
         except:
             return False
-        if data.get('confirm') != self.id:
+        if data.get('confirm') != self._id:
             return False
         self.confirmed = True
         self.save()
@@ -53,7 +67,7 @@ class User(UserMixin, db.Document):
 
     def generate_reset_token(self, expiration=3600):
         s = Serializer(current_app.config['SECRET_KEY'], expiration)
-        return s.dumps({'reset': self.id})
+        return s.dumps({'reset': self._id})
 
     def reset_password(self, token, new_password):
         s = Serializer(current_app.config['SECRET_KEY'])
@@ -61,7 +75,7 @@ class User(UserMixin, db.Document):
             data = s.loads(token)
         except:
             return False
-        if data.get('reset') != self.id:
+        if data.get('reset') != self._id:
             return False
         self.password = new_password
         self.save()
@@ -77,7 +91,7 @@ class User(UserMixin, db.Document):
             data = s.loads(token)
         except:
             return False
-        if data.get('change_email') != self.id:
+        if data.get('change_email') != self._id:
             return False
         new_email = data.get('new_email')
         if new_email is None:
@@ -94,4 +108,4 @@ class User(UserMixin, db.Document):
 
 @login_manager.user_loader
 def load_user(user_id):
-    return User.objects(id = user_id)
+    return User.objects(_id = user_id)
