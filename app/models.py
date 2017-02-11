@@ -5,6 +5,8 @@ from itsdangerous import TimedJSONWebSignatureSerializer as Serializer
 from flask import current_app, request
 from flask_login import UserMixin, AnonymousUserMixin
 from . import db, login_manager
+import bleach
+from markdown import markdown
 
 
 class Permission:
@@ -48,6 +50,36 @@ class Role(db.Document):
     def __repr__(self):
         return '<Role %r>' % self.name
 
+class Post(db.Document):
+    __tablename__ = 'posts'
+    body = db.StringField()
+    body_html = db.StringField()
+    timestamp = db.DateTimeField(default = datetime.utcnow)
+    author = db.ReferenceField(User)
+
+    @staticmethod
+    def generate_fake(count = 100):
+        from random import seed, randint
+        import forgery_py
+
+        seed()
+        user_count = len(User.objects)
+        for i in range(count):
+            u = User.objects[randint(0, user_count - 1)]
+            p = Post(body = forgery_py.lorem_ipsum.sentence(randint(1, 5)),
+                     timestamp = forgery_py.date.date(True),
+                     author = u)
+            p.save()
+    @staticmethod
+    def on_changed_body(targer, value, oldvalue, initiator):
+        allowed_tags = ['a', 'abr', 'acronym', 'b', 'blockquote', 'code',
+                        'em', 'i', 'li', 'ol', 'pre', 'strong', 'ul',
+                        'h1', 'h2', 'h3', 'p']
+        target.body_html = bleach.linkify(bleach.clean(
+            markdown(value, output_format = 'html'),
+            tags = allowed_tags, strip = True
+        ))
+
 
 class User(UserMixin, db.Document):
     __tablename__ = 'users'
@@ -56,19 +88,42 @@ class User(UserMixin, db.Document):
     username = db.StringField(max_length = 64, unique = True)
     #role_id = db.Column(db.Integer, db.ForeignKey('roles.id'))
     password_hash = db.StringField(max_length = 128)
-    confirmed = db.BooleanField(default = False)
+    confirmed = db.BooleanField(default = True)
     role = db.ReferenceField(Role)
     location = db.StringField(max_length = 64)
     avatar_hash = db.StringField(max_length = 64)
-    last_seen = DateTimeField()
+    last_seen = db.DateTimeField()
+    member_since = db.DateTimeField(default = datetime.utcnow())
+    about_me = db.StringField()
+    posts = db.ReferenceField(Post)
+
+    @staticmethod
+    def generate_fake(count=100):
+        from random import seed, randint
+        import forgery_py
+
+        seed()
+        for i in range(count):
+            u = User(forgery_py.internet.email_address(),
+                     username=forgery_py.internet.user_name(True),
+                     password=forgery_py.lorem_ipsum.word(),
+                     confirmed=True,
+                     name=forgery_py.full_name(),
+                     location=forgery_py.address.city(),
+                     about_me=forgery_py.lorem_ipsum.sentence(),
+                     member_since=forgery_py.date.date(True)
+                     )
+            u.save()
 
     def __init__(self, **kwargs):
         super(User, self).__init__(**kwargs)
+        Role.insert_roles()
         if self.role is None:
             if self.email == current_app.config['FLASKY_ADMIN']:
                 self.role = Role.objects(permissions = 0xff).first()
             if self.role is None:
                 self.role = Role.objects(default = True).first()
+            self.save()
 
         if self.email is not None and self.avatar_hash is None:
             self.avatar_hash = hashlib.md5(self.email.encode('utf-8')).hexdigest()
