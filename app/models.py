@@ -50,36 +50,12 @@ class Role(db.Document):
     def __repr__(self):
         return '<Role %r>' % self.name
 
-class Post(db.Document):
-    __tablename__ = 'posts'
-    body = db.StringField()
-    body_html = db.StringField()
-    timestamp = db.DateTimeField(default = datetime.utcnow)
-    author = db.ReferenceField(User)
-
-    @staticmethod
-    def generate_fake(count = 100):
-        from random import seed, randint
-        import forgery_py
-
-        seed()
-        user_count = len(User.objects)
-        for i in range(count):
-            u = User.objects[randint(0, user_count - 1)]
-            p = Post(body = forgery_py.lorem_ipsum.sentence(randint(1, 5)),
-                     timestamp = forgery_py.date.date(True),
-                     author = u)
-            p.save()
-    @staticmethod
-    def on_changed_body(targer, value, oldvalue, initiator):
-        allowed_tags = ['a', 'abr', 'acronym', 'b', 'blockquote', 'code',
-                        'em', 'i', 'li', 'ol', 'pre', 'strong', 'ul',
-                        'h1', 'h2', 'h3', 'p']
-        target.body_html = bleach.linkify(bleach.clean(
-            markdown(value, output_format = 'html'),
-            tags = allowed_tags, strip = True
-        ))
-
+class Follow(db.EmbeddedDocument):
+    __tablename__ = 'follows'
+    timestamp = db.DateTimeField(default = datetime.utcnow())
+    #user = db.ReferenceField(User)
+    follower_id = db.StringField()
+    followed_id = db.StringField()
 
 class User(UserMixin, db.Document):
     __tablename__ = 'users'
@@ -95,7 +71,9 @@ class User(UserMixin, db.Document):
     last_seen = db.DateTimeField()
     member_since = db.DateTimeField(default = datetime.utcnow())
     about_me = db.StringField()
-    posts = db.ReferenceField(Post)
+    followers = db.ListField(db.EmbeddedDocumentField(Follow))
+    followed = db.ListField(db.EmbeddedDocumentField(Follow))
+    #posts = db.ReferenceField(Post)
 
     @staticmethod
     def generate_fake(count=100):
@@ -226,6 +204,42 @@ class User(UserMixin, db.Document):
 
     def __repr__(self):
         return '<User %r>' % self.username
+
+
+class Post(db.Document):
+    __tablename__ = 'posts'
+    body = db.StringField()
+    body_html = db.StringField()
+    timestamp = db.DateTimeField(default = datetime.utcnow())
+    author = db.ReferenceField(User)
+    idx = db.StringField()
+    # @queryset_manager
+    # def objects(doc_cls, queryset):
+    #     return queryset.order_by('-timestamp')
+
+    @staticmethod
+    def generate_fake(count = 100):
+        from random import seed, randint
+        import forgery_py
+
+        seed()
+        user_count = len(User.objects)
+        for i in range(count):
+            u = User.objects[randint(0, user_count - 1)]
+            p = Post(body = forgery_py.lorem_ipsum.sentences(randint(1, 5)),
+                     timestamp = forgery_py.date.date(True),
+                     author = u
+                     )
+            p.save()
+    @staticmethod
+    def on_changed_body(targer, value, oldvalue, initiator):
+        allowed_tags = ['a', 'abr', 'acronym', 'b', 'blockquote', 'code',
+                        'em', 'i', 'li', 'ol', 'pre', 'strong', 'ul',
+                        'h1', 'h2', 'h3', 'p']
+        target.body_html = bleach.linkify(bleach.clean(
+            markdown(value, output_format = 'html'),
+            tags = allowed_tags, strip = True
+        ))
 
 class AnonymousUser(AnonymousUserMixin):
     def can(self, permissions):
