@@ -50,12 +50,12 @@ class Role(db.Document):
     def __repr__(self):
         return '<Role %r>' % self.name
 
-class Follow(db.EmbeddedDocument):
-    __tablename__ = 'follows'
-    timestamp = db.DateTimeField(default = datetime.utcnow())
-    #user = db.ReferenceField(User)
-    follower_id = db.StringField()
-    followed_id = db.StringField()
+# class Follow(db.EmbeddedDocument):
+#     __tablename__ = 'follows'
+#     timestamp = db.DateTimeField(default = datetime.utcnow())
+#     #user = db.ReferenceField(User)
+#     #follower_id = db.StringField()
+#     #user_id = db.StringField()
 
 class User(UserMixin, db.Document):
     __tablename__ = 'users'
@@ -71,8 +71,8 @@ class User(UserMixin, db.Document):
     last_seen = db.DateTimeField()
     member_since = db.DateTimeField(default = datetime.utcnow())
     about_me = db.StringField()
-    followers = db.ListField(db.EmbeddedDocumentField(Follow))
-    followed = db.ListField(db.EmbeddedDocumentField(Follow))
+    followers = db.ListField(db.StringField())
+    followed = db.ListField(db.StringField())
     #posts = db.ReferenceField(Post)
 
     @staticmethod
@@ -202,6 +202,28 @@ class User(UserMixin, db.Document):
         return '{url}/{hash}?s={size}&d={default}&r={rating}'.format(
             url=url, hash=hash, size=size, default=default, rating=rating)
 
+    def follow(self, user):
+        if not self.is_following(user):
+            User.objects(followed__in = user.id).update_one(push__followed = user)
+
+    def unfollow(self, user):
+        f = User.objects(followed__in = user.id)[0]
+        if f:
+            f.update_one(pull__followed = user)
+
+    def is_following(self, user):
+        return User.objects(followed__in = user.id).first() is not None
+
+    def is_followed_by(self, user):
+        return User.objects(follower__in = user.id).first() is not None
+
+    @property
+    def posts(self):
+        return Post.objects
+
+    @property
+    def followed_posts(self):
+        return Post
     def __repr__(self):
         return '<User %r>' % self.username
 
